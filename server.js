@@ -1,8 +1,7 @@
-import makeWASocket, { useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
-import { Boom } from '@hapi/boom'
-import qrcode from 'qrcode-terminal'
-import fs from 'fs'
-import express from 'express'
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
+const qrcode = require('qrcode-terminal')
+const fs = require('fs')
+const express = require('express')
 
 const { state, saveState } = useSingleFileAuthState('./auth_info.json')
 
@@ -11,26 +10,28 @@ const startSock = async () => {
   const sock = makeWASocket({
     version,
     auth: state,
-    printQRInTerminal: true
+    printQRInTerminal: false,
+    browser: ['Ubuntu', 'Chrome', '22.04.4'],
   })
 
   sock.ev.on('creds.update', saveState)
 
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update
+
     if (qr) {
-      console.log('QR code received, displaying...')
+      console.log('📱 Scan QR code:')
       qrcode.generate(qr, { small: true })
     }
 
     if (connection === 'close') {
       const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut
-      console.log('connection closed due to ', lastDisconnect?.error, ', reconnecting ', shouldReconnect)
+      console.log('❌ Disconnected. Reconnecting...', lastDisconnect?.error)
       if (shouldReconnect) {
         startSock()
       }
     } else if (connection === 'open') {
-      console.log('connected to WA')
+      console.log('✅ Connected to WhatsApp!')
     }
   })
 
