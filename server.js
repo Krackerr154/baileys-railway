@@ -9,6 +9,7 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import express from 'express';
+import * as fs from 'fs/promises'; // Import fs/promises at the top
 
 const logger = pino({ level: 'silent' });
 const app = express();
@@ -26,7 +27,7 @@ async function connectToWhatsApp() {
     sock = makeWASocket.default({
         version,
         logger,
-        printQRInTerminal: false, // We'll handle QR printing manually
+        printQRInTerminal: false,
         auth: {
             creds: state.creds,
             keys: makeCacheableSignalKeyStore(state.keys, logger),
@@ -34,7 +35,8 @@ async function connectToWhatsApp() {
         generateHighQualityLinkPreview: true,
     });
 
-    sock.ev.on('connection.update', (update) => {
+    // Make the event listener callback async to use await
+    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         qrCode = qr;
 
@@ -44,11 +46,9 @@ async function connectToWhatsApp() {
             connectionStatus = `Connection closed due to ${lastDisconnect.error}, reconnecting: ${shouldReconnect}`;
             console.log(connectionStatus);
             if (shouldReconnect) {
-                setTimeout(connectToWhatsApp, 5000); // Reconnect after 5 seconds
+                setTimeout(connectToWhatsApp, 5000);
             } else {
-                 // Clean auth files on logout
                 console.log("Logged out, cleaning up auth files and restarting.");
-                const fs = await import('fs/promises');
                 try {
                     await fs.rm('baileys_auth_info', { recursive: true, force: true });
                 } catch (e) {
@@ -58,13 +58,12 @@ async function connectToWhatsApp() {
             }
         } else if (connection === 'open') {
             connectionStatus = 'WhatsApp connected successfully!';
-            qrCode = undefined; // Clear QR code once connected
+            qrCode = undefined;
             console.log(connectionStatus);
         } else {
             connectionStatus = connection || 'Connecting...';
         }
 
-        // Print QR code if available
         if (qr) {
             console.log('QR Code received, scan with your phone:');
             qrcode.generate(qr, { small: true });
@@ -85,7 +84,7 @@ async function connectToWhatsApp() {
         console.log(`Received message from ${sender}: "${messageText}"`);
 
         if (messageText.toLowerCase() === 'ping') {
-            await sock.sendMessage(sender, { text: 'Pong! pong! 🏓' });
+            await sock.sendMessage(sender, { text: 'Pong! 🏓' });
             console.log(`Sent "Pong!" to ${sender}`);
         }
     });
@@ -93,7 +92,6 @@ async function connectToWhatsApp() {
     return sock;
 }
 
-// Express server to keep the process alive
 app.get('/', (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     res.status(200).json({
@@ -115,8 +113,6 @@ app.get('/qr', (req, res) => {
     }
 });
 
-
-// Start the connection and the server
 connectToWhatsApp().catch(err => console.error("Initial WhatsApp connection failed: ", err));
 
 app.listen(PORT, () => {
