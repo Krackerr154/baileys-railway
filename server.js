@@ -12,6 +12,11 @@ const sock = makeWASocket({
     auth: state,
     printQRInTerminal: true
 });
+import fs from 'fs';
+if (fs.existsSync('./auth_info')) {
+    fs.rmSync('./auth_info', { recursive: true, force: true });
+    console.log("🗑️ Auth lama dihapus, siap scan ulang QR.");
+}
 
 sock.ev.on('creds.update', saveCreds);
 sock.ev.on('connection.update', ({ connection }) => {
