@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState } from "@adiwajshing/baileys";
+import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys";
 import express from "express";
 import axios from "axios";
 
