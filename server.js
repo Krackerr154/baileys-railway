@@ -15,10 +15,13 @@ import * as fs from 'fs/promises';
 const TARGET_PHONE_NUMBER = '6282140063265@s.whatsapp.net'; // 👈 PASTE TARGET PHONE NUMBER ID HERE
 const N8N_AI_AGENT_WEBHOOK_URL = 'https://pp-assistant154.azurewebsites.net/webhook-test/ce778736-9b63-472f-a1e2-be679b82289e';  // 👈 PASTE N8N WEBHOOK FOR THE AI AGENT
 const KEYWORD = 'HERP';
+const API_KEY = 'hehe123'; // 👈 SET YOUR SECRET KEY HERE
 // -------------------------
 
 const logger = pino({ level: 'silent' });
 const app = express();
+// Add express.json() middleware to parse JSON bodies
+app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 let sock;
@@ -26,6 +29,7 @@ let qrCode;
 let connectionStatus = 'Connecting...';
 
 async function connectToWhatsApp() {
+    // ... (The connectToWhatsApp function remains exactly the same as before)
     const { state, saveCreds } = await useMultiFileAuthState('baileys_auth_info');
     const { version, isLatest } = await fetchLatestBaileysVersion();
     console.log(`Using Baileys version ${version}, isLatest: ${isLatest}`);
@@ -85,23 +89,19 @@ async function connectToWhatsApp() {
 
         const sender = msg.key.remoteJid;
         
-        // Only process messages from the target phone number
         if (sender !== TARGET_PHONE_NUMBER) {
             return;
         }
 
         const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
         
-        // Check if the message contains the keyword (case-insensitive)
         if (messageText.toUpperCase().includes(KEYWORD.toUpperCase())) {
             console.log(`Keyword "${KEYWORD}" detected from ${sender}.`);
             
             try {
-                // 1. Send the initial confirmation message
                 await sock.sendMessage(sender, { text: `Connecting you to ${KEYWORD}...` });
                 console.log(`Sent "Connecting" message to ${sender}.`);
 
-                // 2. Prepare and forward the data to n8n
                 const payload = {
                     sender_id: sender,
                     sender_name: msg.pushName,
@@ -132,7 +132,44 @@ async function connectToWhatsApp() {
     return sock;
 }
 
+// --- NEW ENDPOINT TO SEND MESSAGES ---
+app.post('/send-message', async (req, res) => {
+    // 1. Authenticate the request
+    const providedApiKey = req.header('X-API-Key');
+    if (providedApiKey !== API_KEY) {
+        return res.status(401).json({ error: 'Unauthorized: Invalid API Key' });
+    }
+
+    // 2. Validate the request body
+    const { to, message } = req.body;
+    if (!to || !message) {
+        return res.status(400).json({ error: 'Bad Request: "to" and "message" are required.' });
+    }
+
+    // 3. Send the WhatsApp message
+    try {
+        // Ensure the JID is in the correct format
+        const formattedJid = to.endsWith('@s.whatsapp.net') ? to : `${to}@s.whatsapp.net`;
+        
+        // Check if the user exists
+        const [result] = await sock.onWhatsApp(formattedJid);
+        if (!result?.exists) {
+            return res.status(404).json({ error: `User ${formattedJid} not found on WhatsApp.`});
+        }
+        
+        await sock.sendMessage(formattedJid, { text: message });
+        console.log(`Message sent to ${formattedJid} via API call.`);
+        res.status(200).json({ success: true, message: 'Message sent successfully.' });
+
+    } catch (error) {
+        console.error('Error sending message via API:', error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+});
+// ------------------------------------
+
 app.get('/', (req, res) => {
+    // ... (This endpoint remains the same)
     res.setHeader('Content-Type', 'application/json');
     res.status(200).json({
         status: 'OK',
@@ -145,6 +182,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/qr', (req, res) => {
+    // ... (This endpoint remains the same)
     if (qrCode) {
         res.setHeader('Content-Type', 'text/plain');
         qrcode.generate(qrCode, { small: true }, (qr) => {
