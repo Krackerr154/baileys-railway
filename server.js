@@ -74,9 +74,11 @@ async function connectToWhatsApp() {
 
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
-        if (!msg.message || msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') {
-            return;
-        }
+        // ...
+		if (!msg.message || msg.key.remoteJid === 'status@broadcast') {
+			return;
+		}	
+// ...
 
         const sender = msg.key.remoteJid;
         const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
