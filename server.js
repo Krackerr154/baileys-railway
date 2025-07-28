@@ -1,7 +1,9 @@
-import pkg from '@whiskeysockets/baileys'
+import makeWASocket, { DisconnectReason, fetchLatestBaileysVersion } from '@whiskeysockets/baileys'
+import { useSingleFileAuthState } from '@whiskeysockets/baileys/lib/utils/auth-utils.js'
 import qrcode from 'qrcode-terminal'
 import fs from 'fs'
 import express from 'express'
+
 
 const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = pkg
 
