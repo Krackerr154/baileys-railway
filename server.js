@@ -1,7 +1,9 @@
-const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys')
-const qrcode = require('qrcode-terminal')
-const fs = require('fs')
-const express = require('express')
+import pkg from '@whiskeysockets/baileys'
+import qrcode from 'qrcode-terminal'
+import fs from 'fs'
+import express from 'express'
+
+const { default: makeWASocket, useSingleFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = pkg
 
 const { state, saveState } = useSingleFileAuthState('./auth_info.json')
 
