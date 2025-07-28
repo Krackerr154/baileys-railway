@@ -3,20 +3,28 @@ import qrcode from 'qrcode-terminal';
 import express from 'express';
 import fs from 'fs';
 import axios from 'axios';
+import { webcrypto } from "node:crypto";
+
+// ✅ Fix "crypto is not defined"
+if (!globalThis.crypto) {
+    globalThis.crypto = webcrypto;
+}
 
 const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, DisconnectReason } = baileys;
 
-// ✅ Auto-reset auth jika error koneksi
+// ✅ Hapus auth lama hanya jika pertama kali run (optional)
 if (fs.existsSync('./auth_info')) {
     fs.rmSync('./auth_info', { recursive: true, force: true });
     console.log("🗑️ Auth lama dihapus, siap scan ulang QR.");
 }
 
+let sock; // ✅ Biar tidak double instance
+
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
     const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({
+    sock = makeWASocket({
         version,
         auth: state,
         printQRInTerminal: true
@@ -31,26 +39,27 @@ async function startBot() {
             const shouldReconnect =
                 lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log('❌ Connection closed. Reconnecting...', lastDisconnect?.error);
+
             if (shouldReconnect) {
-                startBot();
+                setTimeout(() => startBot(), 5000);
             } else {
                 console.log("🔴 Logged out, hapus auth_info dan scan ulang QR.");
                 fs.rmSync('./auth_info', { recursive: true, force: true });
-                startBot();
+                setTimeout(() => startBot(), 5000);
             }
         }
     });
 
-    // ✅ Contoh kirim otomatis ke n8n jika ada pesan masuk
     sock.ev.on('messages.upsert', async ({ messages }) => {
         const m = messages[0];
         if (!m.message || m.key.fromMe) return;
+
         const chatId = m.key.remoteJid;
         const text = m.message.conversation || m.message.extendedTextMessage?.text || "";
 
         console.log("📩 Pesan diterima:", chatId, text);
 
-        // Kirim ke n8n (ubah URL sesuai n8n kamu)
+        // Kirim ke n8n
         try {
             await axios.post("https://YOUR-N8N-URL/webhook/whatsapp", {
                 chatId,
@@ -60,18 +69,22 @@ async function startBot() {
             console.error("❌ Gagal kirim ke n8n:", err.message);
         }
     });
-
-    // ✅ Endpoint manual kirim pesan
-    const app = express();
-    app.use(express.json());
-    app.post('/send', async (req, res) => {
-        const { chatId, text } = req.body;
-        await sock.sendMessage(chatId, { text });
-        res.json({ status: 'ok', sent: text });
-    });
-
-    const PORT = process.env.PORT || 8080;
-    app.listen(PORT, () => console.log(`✅ Server jalan di port ${PORT}`));
 }
 
+// ✅ Jalankan Express hanya sekali (tidak diulang saat reconnect)
+const app = express();
+app.use(express.json());
+
+app.post('/send', async (req, res) => {
+    const { chatId, text } = req.body;
+    if (!sock) return res.status(500).json({ error: "Bot belum siap" });
+
+    await sock.sendMessage(chatId, { text });
+    res.json({ status: 'ok', sent: text });
+});
+
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log(`✅ Server jalan di port ${PORT}`));
+
+// ✅ Mulai bot pertama kali
 startBot();
