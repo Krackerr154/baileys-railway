@@ -9,7 +9,13 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import qrcode from 'qrcode-terminal';
 import express from 'express';
-import * as fs from 'fs/promises'; // Import fs/promises at the top
+import * as fs from 'fs/promises';
+
+// --- 🎯 CONFIGURATION ---
+const TARGET_PHONE_NUMBER = '6282140063265@s.whatsapp.net'; // 👈 PASTE TARGET PHONE NUMBER ID HERE
+const N8N_AI_AGENT_WEBHOOK_URL = 'https://pp-assistant154.azurewebsites.net/webhook-test/ce778736-9b63-472f-a1e2-be679b82289e';  // 👈 PASTE N8N WEBHOOK FOR THE AI AGENT
+const KEYWORD = 'HERP';
+// -------------------------
 
 const logger = pino({ level: 'silent' });
 const app = express();
@@ -35,7 +41,6 @@ async function connectToWhatsApp() {
         generateHighQualityLinkPreview: true,
     });
 
-    // Make the event listener callback async to use await
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         qrCode = qr;
@@ -74,20 +79,53 @@ async function connectToWhatsApp() {
 
     sock.ev.on('messages.upsert', async (m) => {
         const msg = m.messages[0];
-        // ...
-		if (!msg.message || msg.key.remoteJid === 'status@broadcast') {
-			return;
-		}	
-// ...
+        if (!msg.message || msg.key.fromMe || msg.key.remoteJid === 'status@broadcast') {
+            return;
+        }
 
         const sender = msg.key.remoteJid;
+        
+        // Only process messages from the target phone number
+        if (sender !== TARGET_PHONE_NUMBER) {
+            return;
+        }
+
         const messageText = msg.message.conversation || msg.message.extendedTextMessage?.text || '';
+        
+        // Check if the message contains the keyword (case-insensitive)
+        if (messageText.toUpperCase().includes(KEYWORD.toUpperCase())) {
+            console.log(`Keyword "${KEYWORD}" detected from ${sender}.`);
+            
+            try {
+                // 1. Send the initial confirmation message
+                await sock.sendMessage(sender, { text: `Connecting you to ${KEYWORD}...` });
+                console.log(`Sent "Connecting" message to ${sender}.`);
 
-        console.log(`Received message from ${sender}: "${messageText}"`);
+                // 2. Prepare and forward the data to n8n
+                const payload = {
+                    sender_id: sender,
+                    sender_name: msg.pushName,
+                    message: messageText,
+                    timestamp: new Date().toISOString()
+                };
 
-        if (messageText.toLowerCase() === 'ping') {
-            await sock.sendMessage(sender, { text: 'Pong! 🏓' });
-            console.log(`Sent "Pong!" to ${sender}`);
+                console.log('Forwarding message to n8n AI agent...');
+                const response = await fetch(N8N_AI_AGENT_WEBHOOK_URL, {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`n8n webhook returned status ${response.status}`);
+                }
+                
+                console.log('Message successfully forwarded to n8n.');
+
+            } catch (error) {
+                console.error('Error during AI agent processing:', error);
+                await sock.sendMessage(sender, { text: `Sorry, could not connect to ${KEYWORD} at the moment. Please try again later. ❌` });
+            }
         }
     });
 
@@ -100,7 +138,9 @@ app.get('/', (req, res) => {
         status: 'OK',
         message: 'WhatsApp Bot is running.',
         connection: connectionStatus,
-        qr: qrCode ? 'QR code is available at /qr' : 'No QR code available.'
+        mode: 'AI Agent Gatekeeper',
+        target_number: TARGET_PHONE_NUMBER,
+        keyword: KEYWORD
     });
 });
 
