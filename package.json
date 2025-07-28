@@ -1,0 +1,14 @@
+{
+  "name": "baileys-railway",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@adiwajshing/baileys": "^6.7.5",
+    "express": "^4.18.2",
+    "axios": "^1.4.0"
+  }
+}
