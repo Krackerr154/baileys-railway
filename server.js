@@ -5,6 +5,41 @@ import fs from 'fs';
 import axios from 'axios';
 import { webcrypto } from "node:crypto";
 
+const { makeWASocket, useSingleFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const qrcode = require('qrcode-terminal'); // Tambahkan ini
+
+const { state, saveState } = useSingleFileAuthState('./auth_info.json');
+
+async function startSock() {
+    const sock = makeWASocket({
+        auth: state,
+        printQRInTerminal: false, // Jangan pakai ini lagi, sudah deprecated
+        browser: ['Ubuntu', 'Chrome', '22.04.4'],
+    });
+
+    // Tampilkan QR di terminal secara manual
+    sock.ev.on('connection.update', ({ connection, lastDisconnect, qr }) => {
+        if (qr) {
+            qrcode.generate(qr, { small: true }); // Tampilkan QR ke terminal
+        }
+
+        if (connection === 'close') {
+            const shouldReconnect = (lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut);
+            console.log('❌ Disconnected, reconnecting...', lastDisconnect?.error);
+            if (shouldReconnect) {
+                startSock();
+            }
+        } else if (connection === 'open') {
+            console.log('✅ Connected to WhatsApp');
+        }
+    });
+
+    sock.ev.on('creds.update', saveState);
+}
+
+startSock();
+
+
 // ✅ Fix "crypto is not defined"
 if (!globalThis.crypto) {
     globalThis.crypto = webcrypto;
