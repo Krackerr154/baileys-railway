@@ -1,15 +1,25 @@
-import makeWASocket, { useMultiFileAuthState } from "@whiskeysockets/baileys";
-import express from "express";
-import axios from "axios";
+import baileys from '@whiskeysockets/baileys';
+const { makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = baileys;
+import qrcode from 'qrcode-terminal';
+import express from 'express';
+import axios from 'axios';
 
-const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
-const sock = makeWASocket({ auth: state });
+const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+const { version } = await fetchLatestBaileysVersion();
 
-sock.ev.on("connection.update", ({ connection }) => {
-    if (connection === "open") console.log("✅ Baileys aktif di Railway!");
+const sock = makeWASocket({
+    version,
+    auth: state,
+    printQRInTerminal: true
 });
 
-sock.ev.on("creds.update", saveCreds);
+sock.ev.on('creds.update', saveCreds);
+sock.ev.on('connection.update', ({ connection }) => {
+    if (connection === 'open') console.log('✅ Baileys aktif!');
+});
+
+// (Lanjutkan logic kirim pesan ke n8n & endpoint /send)
+
 
 // ✅ Kirim pesan masuk ke n8n (opsional)
 sock.ev.on("messages.upsert", async ({ messages }) => {
